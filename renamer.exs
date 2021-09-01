@@ -1,12 +1,71 @@
-defmodule Reader do
-  @extension_whitelist ~w(.jpg .jpeg)
+Mix.install([
+  {:timex, "~> 3.0"}
+])
 
-  def rename(filepath) do
+defmodule Reader do
+  @video_files ~w(.mov .MOV)
+
+  def run(filepath) do
+    filepath
+    |> IO.inspect(label: "\n")
+    |> identify_format()
+    |> read_date()
+    |> parse_date()
+    |> IO.inspect()
   end
 
-  def read_date(filepath) do
-    {out, _status} = System.cmd("exiftool", ["-DateTimeOriginal", "-ee", filepath])
-    IO.inspect(filepath <> " " <> out)
+  defp identify_format(filepath) do
+    if Enum.member?(@video_files, Path.extname(filepath)) do
+      {:video, filepath}
+    else
+      {:image, filepath}
+    end
+  end
+
+  defp read_date({:video, filepath}) do
+    {date, _status} = System.cmd("exiftool", ["-T", "-CreationDate", "-ee", filepath])
+
+    {:with_timezone, date}
+  end
+
+  defp read_date({:image, filepath}) do
+    case read_date_time_original(filepath) do
+      "-\n" ->
+        IO.inspect("no original date, looking for datetime")
+
+        date =
+          filepath
+          |> read_date_time()
+
+        {:with_timezone, date}
+
+      date ->
+        {:no_timezone, date}
+    end
+  end
+
+  defp read_date_time_original(filepath) do
+    {date, _status} = System.cmd("exiftool", ["-T", "-DateTimeOriginal", "-ee", filepath])
+    date
+  end
+
+  defp read_date_time(filepath) do
+    {date, _status} = System.cmd("exiftool", ["-T", "-FileModifyDate", "-ee", filepath])
+    date
+  end
+
+  defp parse_date({:no_timezone, date}) do
+    date
+    |> String.trim("\n")
+    |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
+  end
+
+  defp parse_date({:with_timezone, date}) do
+    date
+    |> String.trim("\n")
+    |> String.split("+")
+    |> hd()
+    |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
   end
 end
 
@@ -16,9 +75,7 @@ list = File.ls!(path)
 
 out =
   list
-  |> Enum.map(&Reader.read_date(path <> &1))
-
-IO.puts(out)
+  |> Enum.map(&Reader.run(path <> &1))
 
 # Command for MOV files:
 # exiftool -CreationDate -ee filepath
