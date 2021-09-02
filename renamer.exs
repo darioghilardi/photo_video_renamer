@@ -37,14 +37,21 @@ defmodule Runner do
   end
 
   defp read_date({:video, filepath}) do
-    {date, _status} = System.cmd("exiftool", ["-T", "-CreationDate", "-ee", filepath])
+    {output, _status} =
+      System.cmd("exiftool", ["-T", "-CreationDate", "-FileName", "-ee", filepath])
 
-    {:with_timezone, date}
+    list =
+      output
+      |> String.trim("\n")
+      |> String.split("\t")
+      |> (fn [date, filename] -> %{date: date, filename: filename} end).()
+
+    {:with_timezone, list}
   end
 
   defp read_date({:image, filepath}) do
     case read_date_time_original(filepath) do
-      "-\n" ->
+      %{date: "-", filename: _} ->
         IO.inspect("no original date, looking for datetime")
 
         date =
@@ -53,44 +60,57 @@ defmodule Runner do
 
         {:with_timezone, date}
 
-      date ->
-        {:no_timezone, date}
+      file ->
+        {:no_timezone, file}
     end
   end
 
   defp read_date_time_original(filepath) do
-    {date, _status} = System.cmd("exiftool", ["-T", "-DateTimeOriginal", "-ee", filepath])
-    date
+    {output, _status} =
+      System.cmd("exiftool", ["-T", "-DateTimeOriginal", "-Filename", "-ee", filepath])
+
+    output
+    |> String.trim("\n")
+    |> String.split("\t")
+    |> IO.inspect()
+    |> (fn [date, filename] -> %{date: date, filename: filename} end).()
   end
 
   defp read_date_time(filepath) do
-    {date, _status} = System.cmd("exiftool", ["-T", "-FileModifyDate", "-ee", filepath])
-    date
-  end
+    {output, _status} =
+      System.cmd("exiftool", ["-T", "-FileModifyDate", "-Filename", "-ee", filepath])
 
-  defp parse_date({:no_timezone, date}) do
-    date
+    output
     |> String.trim("\n")
-    |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
+    |> String.split("\t")
+    |> (fn [date, filename] -> %{date: date, filename: filename} end).()
   end
 
-  defp parse_date({:with_timezone, date}) do
-    date
-    |> String.trim("\n")
-    |> String.split("+")
-    |> hd()
-    |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
+  defp parse_date({:no_timezone, %{date: date, filename: filename}}) do
+    %{date: date |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime), filename: filename}
   end
 
-  defp stringify_date(date) do
-    Timex.format!(date, "%Y%m%d_%H%M%S", :strftime)
+  defp parse_date({:with_timezone, %{date: date, filename: filename}}) do
+    %{
+      date: date |> String.split("+") |> hd() |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime),
+      filename: filename
+    }
+  end
+
+  defp stringify_date(%{date: date} = file) do
+    file |> Map.put(:date, Timex.format!(date, "%Y%m%d_%H%M%S", :strftime))
+  end
+
+  # To rename I need the filename
+  defp rename(date) do
   end
 end
 
 # return all the dates
+path = System.argv() |> hd()
+
 dates =
-  System.argv()
-  |> hd()
+  path
   |> File.ls!()
   |> Enum.map(&Runner.run(path <> &1))
 
