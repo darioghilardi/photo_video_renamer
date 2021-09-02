@@ -1,8 +1,21 @@
+# Rename pictures and videos to their creation date according to the EXIF tags.
+#
+# Usage:
+#   > elixir renamer.exs path_with_pics
+#
+# Notes:
+# Command for MOV files:
+#   > exiftool -CreationDate -ee filepath
+# Command for JPEG files:
+#   > exiftool -DateTimeOriginal -ee filepath
+# Variant using exiv2:
+#   > {out, _status} = System.cmd("exiv2", ["-g", "Exif.Image.DateTime", "-Pv", filepath])
+
 Mix.install([
   {:timex, "~> 3.0"}
 ])
 
-defmodule Reader do
+defmodule Runner do
   @video_files ~w(.mov .MOV)
 
   def run(filepath) do
@@ -11,6 +24,7 @@ defmodule Reader do
     |> identify_format()
     |> read_date()
     |> parse_date()
+    |> stringify_date()
     |> IO.inspect()
   end
 
@@ -67,21 +81,19 @@ defmodule Reader do
     |> hd()
     |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
   end
+
+  defp stringify_date(date) do
+    Timex.format!(date, "%Y%m%d_%H%M%S", :strftime)
+  end
 end
 
-path = "/Users/dario/Downloads/ireland_renamed/"
+# return all the dates
+dates =
+  System.argv()
+  |> hd()
+  |> File.ls!()
+  |> Enum.map(&Runner.run(path <> &1))
 
-list = File.ls!(path)
-
-out =
-  list
-  |> Enum.map(&Reader.run(path <> &1))
-
-# Command for MOV files:
-# exiftool -CreationDate -ee filepath
-
-# Command for JPEGS:
-# exiftool -DateTimeOriginal -ee filepath
-
-# Variant using exiv2:
-# {out, _status} = System.cmd("exiv2", ["-g", "Exif.Image.DateTime", "-Pv", filepath])
+# list the duplicates
+duplicates = Enum.uniq(dates -- Enum.uniq(dates))
+IO.inspect(duplicates, label: "duplicates")
