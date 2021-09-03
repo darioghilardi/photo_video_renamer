@@ -25,6 +25,7 @@ defmodule Runner do
     |> read_date()
     |> parse_date()
     |> stringify_date()
+    |> rename(filepath)
     |> IO.inspect()
   end
 
@@ -102,7 +103,13 @@ defmodule Runner do
   end
 
   # To rename I need the filename
-  defp rename(date) do
+  defp rename(%{date: date, filename: filename}, filepath) do
+    ext = Path.extname(filename)
+
+    case File.exists?(filepath <> date <> ext) do
+      # finish the recursion here to handle duplicated filenames
+      true -> rename(%{date: date})
+    end
   end
 end
 
