@@ -32,15 +32,6 @@ defmodule Reader do
     |> Enum.map(&stringify_date/1)
     |> IO.inspect()
     |> rename_duplicates(filepath)
-
-    # |> String.split("\n")
-    # |> Enum.map(&String.split(&1, "\t"))
-    # # Reject videos without date, will need to rename them manually
-    # |> Enum.reject(fn i -> Enum.count(i) == 1 end)
-    # |> Enum.map(fn [date, filename] -> %{date: date, filename: filename} end)
-    # |> Enum.map(&parse_date(:with_timezone, &1))
-    # |> Enum.map(&stringify_date(&1))
-    # |> IO.inspect(limit: :infinity)
   end
 
   defp read_exif(filepath) do
