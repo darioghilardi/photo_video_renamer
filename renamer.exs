@@ -1,36 +1,16 @@
-# Rename pictures and videos to their creation date according to the EXIF tags.
-#
-# Usage:
-#   > elixir renamer.exs path_with_pics/
-#
-# Notes:
-# Command for MOV files:
-#   > exiftool -CreationDate -ee filepath
-#
-# Command for JPEG files:
-#   > exiftool -DateTimeOriginal -ee filepath
-#
-# Fallback for JPEG files:
-#   > exiftool -FileModifyDate -ee filepath
-#
-# Variant using exiv2:
-#   > {out, _status} = System.cmd("exiv2", ["-g", "Exif.Image.DateTime", "-Pv", filepath])
-
 Mix.install([
   {:timex, "~> 3.0"}
 ])
 
-defmodule Reader do
-  @video_ext ~w(.mov .MOV)
-  @image_ext ~w(.jpg .JPG .jpeg .JPEG .heic .HEIC)
-
+defmodule Renamer do
   def process(filepath) do
     filepath
     |> read_exif()
     |> parse_exif()
+    # Write to file for debugging.
+    |> write_exif_results()
     |> Enum.map(&select_date_field/1)
     |> Enum.map(&stringify_date/1)
-    |> IO.inspect()
     |> rename_duplicates(filepath)
   end
 
@@ -69,6 +49,25 @@ defmodule Reader do
     end)
   end
 
+  defp write_exif_results(files) do
+    content =
+      files
+      |> Enum.map(fn
+        %{
+          creation_date: creation_date,
+          date_time_original: date_time_original,
+          modify_date: modify_date,
+          filename: filename
+        } ->
+          "creation_date: #{creation_date} date_time_original: #{date_time_original} modify_date: #{modify_date} filename #{filename}"
+      end)
+      |> Enum.join("\n")
+
+    File.write!("exif_results.txt", content)
+
+    files
+  end
+
   defp parse_date("-"), do: "-"
   defp parse_date(date), do: date |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
 
@@ -87,19 +86,14 @@ defmodule Reader do
         modify_date: modify_date,
         filename: filename
       }) do
-    ext = Path.extname(filename)
-
     cond do
-      Enum.member?(@video_ext, ext) ->
-        %{filename: filename, date: creation_date}
-
-      Enum.member?(@video_ext, ext) ->
-        %{filename: filename, date: creation_date}
-
-      Enum.member?(@image_ext, ext) and Timex.is_valid?(date_time_original) ->
+      Timex.is_valid?(date_time_original) ->
         %{filename: filename, date: date_time_original}
 
-      Enum.member?(@image_ext, ext) and !Timex.is_valid?(date_time_original) ->
+      Timex.is_valid?(creation_date) ->
+        %{filename: filename, date: creation_date}
+
+      Timex.is_valid?(modify_date) ->
         %{filename: filename, date: modify_date}
     end
   end
@@ -135,4 +129,4 @@ defmodule Reader do
 end
 
 path = System.argv() |> hd()
-Reader.process(path)
+Renamer.process(path)
