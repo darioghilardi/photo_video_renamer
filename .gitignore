@@ -1,1 +1,4 @@
-exif_results.txt
+exif_parsed_results.txt
+exif_read.txt
+.direnv/
+.envrc
