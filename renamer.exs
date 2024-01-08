@@ -5,20 +5,24 @@ Mix.install([
 defmodule Renamer do
   def process(filepath) do
     filepath
-    |> read_exif()
+    |> read_exif(from_file: false)
     |> parse_exif()
-    # Write to file for debugging.
     |> write_exif_results()
     |> Enum.map(&select_date_field/1)
     |> Enum.map(&stringify_date/1)
     |> rename_duplicates(filepath)
   end
 
-  defp read_exif(filepath) do
-    IO.puts("Reading Exif Tags")
-
+  defp read_exif(filepath, [from_file: from_file]) do
+    if from_file do
+      IO.puts("Reading Exif Tags from dumped exif_read.txt...")
+      File.read!("exif_read.txt")
+    else
+    IO.puts("Reading Exif Tags from pictures folder...")
     {output, _status} =
       System.cmd("exiftool", [
+        "-dateFormat",
+        "%Y-%m-%d %H:%M:%S",
         "-T",
         "-CreationDate",
         "-DateTimeOriginal",
@@ -27,12 +31,14 @@ defmodule Renamer do
         "-ee",
         filepath
       ])
+      File.write!("exif_read.txt", output)
 
-    output
+      output
+    end
   end
 
   defp parse_exif(output) do
-    IO.puts("Parsing Exif Tags")
+    IO.puts("Parsing Exif Tags...")
 
     output
     |> String.split("\n")
@@ -41,9 +47,9 @@ defmodule Renamer do
     |> Enum.reject(fn i -> Enum.count(i) == 1 end)
     |> Enum.map(fn [creation_date, date_time_original, modify_date, filename] ->
       %{
-        creation_date: parse_date_with_tz(creation_date),
+        creation_date: parse_date(creation_date),
         date_time_original: parse_date(date_time_original),
-        modify_date: parse_date_with_tz(modify_date),
+        modify_date: parse_date(modify_date),
         filename: filename
       }
     end)
@@ -63,22 +69,13 @@ defmodule Renamer do
       end)
       |> Enum.join("\n")
 
-    File.write!("exif_results.txt", content)
+    File.write!("exif_parsed_results.txt", content)
 
     files
   end
 
   defp parse_date("-"), do: "-"
-  defp parse_date(date), do: date |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
-
-  defp parse_date_with_tz("-"), do: "-"
-
-  defp parse_date_with_tz(date) do
-    date
-    |> String.split("+")
-    |> hd()
-    |> Timex.parse!("%Y:%m:%d %H:%M:%S", :strftime)
-  end
+  defp parse_date(date), do: date |> Timex.parse!("%Y-%m-%d %H:%M:%S", :strftime)
 
   def select_date_field(%{
         creation_date: creation_date,
